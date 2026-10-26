@@ -87,6 +87,16 @@
 
 使用者點頭後：`ENABLED = "true"` → deploy → 用 /run 確認回 `no new comments`（代表沒有誤回舊留言）。
 
+
+## 10. 出問題寄信（選配，建議做）
+
+1. **使用者**：用想收信的 Google 帳號打開 https://script.new ，**AI** 告訴他貼上 `references/alert-mailer.gs`、把 `TO` 換成他的信箱。
+2. **使用者**：部署 → 新增部署作業 → 網頁應用程式（執行身分「我」、存取「所有人」）→ 授權（「未驗證的應用程式」按進階 → 前往）。
+3. **AI**：拿到網址後 `printf '%s' '<網址>' | npx -y wrangler@4 secret put ALERT_URL`，再打開 `/alert-test?key=<RUN_KEY>` 確認收得到信。
+4. 之後遇到 IG 錯誤 190／200／368／限流，或 KV 額度用完、程式出錯，會寄信，同類 1 小時一封。
+
+補發停擺期間漏掉的人：`/run?key=<RUN_KEY>&minutes=<分鐘>&delay=6000&limit=8`，多跑幾次直到回 `no new comments`。慢慢補，避免又被當成異常活動。
+
 ---
 
 ## 隱私權政策範本（改成使用者自己的名字與信箱）

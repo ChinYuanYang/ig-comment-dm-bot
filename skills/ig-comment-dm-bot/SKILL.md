@@ -1,6 +1,6 @@
 ---
 name: ig-comment-dm-bot
-version: 0.2.2
+version: 0.3.0
 description: >-
   IG 留言關鍵字自動私訊：讀者在貼文留言指定關鍵字（例如「懶人包」），自動私訊、在留言底下公開回覆，
   （可選）確認有追蹤後再傳檔案連結。自己架在 Meta App＋Cloudflare 免費方案，不用 ManyChat。
@@ -35,6 +35,8 @@ last-updated: 2026-10-26
 | 第一次架設（不用終端機／要分享給別人） | 讀 `references/web-setup-guide.md`：全程用 Cloudflare 網頁貼程式，`/setup?key=RUN_KEY` 一鍵查 IG 編號、訂閱通知、找小號編號 |
 | 新增或換活動（換關鍵字、換檔案） | 只改 wrangler.toml 的 `CAMPAIGNS` → deploy → 用小號測新關鍵字 |
 | 暫停／打開 | `ENABLED` 改 "false"／"true" → deploy |
+| 停擺後補發 | `/run?key=…&minutes=…&delay=6000&limit=8` 多跑幾次；先修好停擺原因再補，慢慢補 |
+| 出問題寄信（選配） | 架設最後一步做：`references/alert-mailer.gs` 部署成網頁應用程式，網址存成 Secret `ALERT_URL`，`/alert-test` 測試 |
 | 讀者說沒收到 | 見下方「排錯」 |
 
 ## 不適用情境

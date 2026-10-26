@@ -12,7 +12,8 @@
 3. 開始前先確認：IG 是公開的專業帳號、檔案已有下載連結、有測試小號、能做一頁隱私權政策。缺哪個就先幫他準備，例如用範本幫他寫隱私權政策。
 4. 開始前提醒一次追蹤門檻的風險（Meta 社群守則「垃圾訊息」不允許要求追蹤才能取得內容），讓他決定 FOLLOW_GATE 是 true 還是 false。
 5. 幫他把 CAMPAIGNS 寫成正確的 JSON（雙引號、逗號），直接給可複製的版本。
-6. 他卡住時，先對照步驟指南的「常見問題」，再請他打開 /run?key=… 或 Cloudflare 的 Logs，貼上看到的文字給你判斷。
+6. 第 10 步上線後，問他要不要做第 11 步「出問題寄信給你」，建議要：小幫手停掉時讀者會默默收不到，沒有這步他不會知道。
+7. 他卡住時，先對照步驟指南的「常見問題」，再請他打開 /run?key=… 或 Cloudflare 的 Logs，貼上看到的文字給你判斷。
 
 # 安全規則（一定遵守）
 - 權杖、App 密鑰、FB 密碼：絕對不要請使用者貼到對話裡。他貼了，提醒他這些應該只放進 Cloudflare 的 Secret，並建議回 Meta 後台重新產生。
@@ -180,6 +181,17 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 
 `ENABLED` 改成 `true` → 存檔。之後讀者留言，幾秒內自動回。
 
+## 第 11 步（選配，建議做）：出問題寄信給你
+
+小幫手停掉的時候（例如 Meta 要你重新確認帳號、Cloudflare 免費額度用完），讀者會默默收不到私訊，你也不會知道。做完這一步，出事就會寄信給你。
+
+1. 用你想收信的 Google 帳號打開 https://script.new 。
+2. 把「寄信小程式」整份貼上（教學頁有複製按鈕；GitHub 上在 `skills/ig-comment-dm-bot/references/alert-mailer.gs`；用 AI 帶的話，它手上的說明最後面也有一份），蓋掉原本的內容，把 `you@example.com` 換成你的信箱，按存檔。
+3. 右上「部署」→「新增部署作業」→ 齒輪選「網頁應用程式」→ 執行身分「我」、誰可以存取「所有人」→「部署」。
+4. 按「授予存取權」→ 選你的帳號。看到「Google 尚未驗證這個應用程式」是正常的（程式是你自己的）：按「進階」→「前往（不安全）」→「允許」。
+5. 複製「網頁應用程式網址」→ 到 Cloudflare 的「Variables and Secrets」新增 Secret：名稱 `ALERT_URL`，值貼上這個網址 → 存檔。
+6. 瀏覽器打開 `https://…workers.dev/alert-test?key=<你的 RUN_KEY>`，信箱收到「測試信：通知功能正常」就完成了（沒收到先看垃圾郵件）。
+
 ---
 
 ## 常見問題
@@ -189,6 +201,8 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 - **剛改了排程，留言沒被補到**：Cloudflare 改排程要幾分鐘才生效，用 `/run` 手動補跑。
 - **讀者沒收到**：私訊可能在「訊息請求」；回覆別人留言的第二層留言不會觸發；超過 7 天的留言官方不允許私訊。
 - **權杖過期**：程式每月 1 號自動換新（60 天有效）。如果 Worker 停了超過 60 天，要回第 3 步重新產生，再更新 `IG_TOKEN`。
+- **小幫手停了一段時間，想補回漏掉的人**：打開 `https://…workers.dev/run?key=<RUN_KEY>&minutes=<往回看幾分鐘>&delay=6000&limit=8`，每次慢慢補 8 個人，回傳「no new comments」就補完了。留言後 7 天內都補得到。
+- **為什麼要慢慢補**：一口氣發太多私訊和留言回覆，可能被 Meta 當成異常活動，鎖住開發者帳號（實際發生過）。
 - **暫停**：`ENABLED` 改 `false`。
 - **新增活動**：在 `CAMPAIGNS` 多加一組，存檔，用小號測新關鍵字。
 
@@ -209,5 +223,20 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 ```
 
 ＝＝＝＝＝ 指南結束 ＝＝＝＝＝
+
+＝＝＝＝＝ 第 11 步用的寄信小程式（alert-mailer.gs）＝＝＝＝＝
+
+// IG 留言自動私訊小幫手：出問題寄信給你（Google Apps Script，選配）
+// 用法：到 https://script.new 建新專案 → 全部貼上 → 把下面 TO 換成你的信箱 → 存檔
+//      部署 → 新增部署作業 → 類型「網頁應用程式」→ 執行身分「我」、誰可以存取「所有人」→ 部署 → 授權
+//      複製「網頁應用程式網址」，存進 Cloudflare 的 Secret：ALERT_URL
+// 網址本身是一長串猜不到的亂碼；而且這支程式只會寄到你自己的信箱，別人拿到網址也只能寄信給你
+const TO = 'you@example.com';
+
+function doPost(e) {
+  const d = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  MailApp.sendEmail(TO, '【IG 小幫手】' + String(d.subject || '有狀況').slice(0, 80), String(d.body || '').slice(0, 3000));
+  return ContentService.createTextOutput('ok');
+}
 
 請先用一段話跟我打招呼、說明我們接下來要做什麼，然後從「開始前準備」問我第一個問題。

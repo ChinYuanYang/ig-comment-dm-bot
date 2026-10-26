@@ -22,6 +22,7 @@ CAMPAIGNS = '''[
 ]'''
 
 # 機密（不寫在這裡，用 npx wrangler secret put 設定）：IG_TOKEN、RUN_KEY、APP_SECRET、IG_APP_SECRET
+# 選配機密：ALERT_URL（出問題寄信用的 Google Apps Script 網址，見 references/alert-mailer.gs）
 
 [[kv_namespaces]]
 binding = "KV"

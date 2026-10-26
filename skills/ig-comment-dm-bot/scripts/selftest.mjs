@@ -8,8 +8,15 @@ const calls = [];
 let follows = false;
 let pollComments = [];
 
+const mails = [];
+let igError = null; // 設成 { code: 200, message: "..." } 模擬 Meta 擋住
+const cacheStore = new Map();
+globalThis.caches = { default: { match: async (r) => cacheStore.get(r.url), put: async (r, v) => void cacheStore.set(r.url, v) } };
+
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
+  if (url.startsWith("https://mail.test")) { mails.push(JSON.parse(init.body)); return { text: async () => "ok" }; }
+  if (igError) return { json: async () => ({ error: igError }) };
   const body = init.body ? String(init.body) : "";
   calls.push({ url, body });
   let json = {};
@@ -145,6 +152,41 @@ KV.get = kvGet;
 const polled = sent().map((m) => m.recipient.comment_id);
 check("補掃：10 分鐘前漏掉的留言會補回", polled.includes("P2") && runLog.includes("private reply"));
 check("補掃：90 秒內的留給通知、45 分鐘前的不再查", !polled.includes("P1") && !polled.includes("P3") && reads <= 3);
+
+// 14. /run 補發：public=0 不公開回覆、limit 限制數量
+{
+  const many = { data: [1, 2, 3].map((n) => ({ id: `B${n}`, text: "懶人包", timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(), from: { id: `R${n}`, username: `r${n}` } })) };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => (String(input).includes("/M1/comments") ? { json: async () => many } : realFetch(input, init));
+  calls.length = 0;
+  const out = await (await worker.fetch(new Request("https://x.dev/run?key=rk&minutes=60&public=0&limit=2"), env, {})).text();
+  globalThis.fetch = realFetch;
+  check("/run 補發：只處理 2 則、不公開回覆", sent().length === 2 && !calls.some((c) => c.url.includes("/replies")) && out.includes("private reply"));
+}
+
+// 15. 出問題寄信：Meta 擋住 → 寄 1 封；1 小時內同類不重複寄
+env.ALERT_URL = "https://mail.test/x";
+igError = { code: 200, message: "API access blocked." };
+for (let i = 0; i < 2; i++) {
+  const waits = [];
+  await worker.scheduled({ cron: "* * * * *" }, env, { waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+}
+igError = null;
+check("Meta 擋住 → 寄 1 封信、不重複寄", mails.length === 1 && mails[0].subject.includes("Meta 擋住"));
+
+// 16. KV 額度用完（寫入失敗）→ 寄信
+{
+  const realPut = KV.put;
+  KV.put = async () => { throw new Error("KV PUT failed: 429 Too Many Requests"); };
+  await hook(comment("C10", "懶人包", "U20"));
+  KV.put = realPut;
+  check("KV 寫不進去 → 寄「額度用完」的信", mails.some((m) => m.subject.includes("KV")));
+}
+
+// 17. /alert-test 一定寄得出去
+const at = await (await worker.fetch(new Request("https://x.dev/alert-test?key=rk"), env, {})).text();
+check("/alert-test 寄出測試信", at.includes("test: ok") && mails.some((m) => m.subject.includes("測試信")));
 
 console.log(fail ? `\n${fail} 項失敗` : "\n全部通過");
 process.exit(fail ? 1 : 0);
