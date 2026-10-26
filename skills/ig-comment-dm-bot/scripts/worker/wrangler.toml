@@ -1,0 +1,28 @@
+name = "__WORKER_NAME__"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+
+[triggers]
+# 每 1 分鐘補掃留言（主力是留言通知，幾秒內處理）；每月 1 號台灣時間 11:00 換權杖
+crons = ["* * * * *", "0 3 1 * *"]
+
+[vars]
+IG_USER_ID = "__IG_USER_ID__"        # GET /me?fields=user_id 拿到的 user_id
+IG_USERNAME = "__IG_USERNAME__"      # 不含 @
+ENABLED = "false"                    # 測完、使用者點頭後才改 "true"
+TEST_USERS = "__TEST_IGSID__"        # 測試小號的 IGSID，總開關關著時只回它
+FOLLOW_GATE = "true"                 # "true"＝追蹤才給檔案；"false"＝留言就直接給（Meta 社群守則較安全）
+WATCH_POSTS = "3"                    # 備援掃描看最新幾篇
+REFRESH_CRON = "0 3 1 * *"
+HUB_VERIFY = "__HUB_VERIFY__"        # Meta 後台 webhook「驗證權杖」欄位填同一個字串（不是機密）
+# 活動清單：keyword 留言關鍵字、name 檔案名稱（會出現在私訊裡）、file_url 下載連結
+# 可選 ask_text／file_text 覆寫該活動的私訊文案
+CAMPAIGNS = '''[
+  {"keyword": "__KEYWORD__", "name": "__FILE_NAME__", "file_url": "__FILE_URL__"}
+]'''
+
+# 機密（不寫在這裡，用 npx wrangler secret put 設定）：IG_TOKEN、RUN_KEY、APP_SECRET、IG_APP_SECRET
+
+[[kv_namespaces]]
+binding = "KV"
+id = "__KV_ID__"
