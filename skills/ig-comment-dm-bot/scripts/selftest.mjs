@@ -6,6 +6,7 @@ import worker from "./worker/src/index.js";
 const SECRET = "test-secret";
 const calls = [];
 let follows = false;
+let pollComments = [];
 
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
@@ -19,7 +20,7 @@ globalThis.fetch = async (input, init = {}) => {
   else if (url.includes("/me?fields=user_id")) json = { user_id: "OWNER", username: "your.account", account_type: "BUSINESS" };
   else if (url.includes("subscribed_apps")) json = { success: true };
   else if (url.includes("/me/conversations")) json = { data: [{ participants: { data: [{ username: "your.account", id: "OWNER" }, { username: "alt.account", id: "ALT1" }] } }] };
-  else if (url.includes("/M1/comments")) json = { data: [] };
+  else if (url.includes("/M1/comments")) json = { data: pollComments };
   return { json: async () => json };
 };
 
@@ -128,6 +129,22 @@ const su = await (await worker.fetch(new Request("https://x.dev/setup?key=rk"), 
 check("/setup 給出 IG 編號、訂閱成功、小號編號", su.includes("IG_USER_ID 請填：OWNER") && su.includes("成功") && su.includes("alt.account：ALT1") && !su.includes("your.account："));
 const bad = await (await worker.fetch(new Request("https://x.dev/setup?key=wrong"), env, {})).text();
 check("/setup 沒帶對鑰匙就不給看", bad === "ok");
+
+// 14. 每分鐘補掃：只補 90 秒～30 分鐘前的留言，更舊的不再查（省 KV 讀取）
+const ago = (min) => new Date(Date.now() - min * 60 * 1000).toISOString();
+pollComments = [
+  { id: "P1", text: "懶人包", timestamp: ago(0.5), from: { id: "U20", username: "a" } },
+  { id: "P2", text: "懶人包", timestamp: ago(10), from: { id: "U21", username: "b" } },
+  { id: "P3", text: "懶人包", timestamp: ago(45), from: { id: "U22", username: "c" } },
+];
+calls.length = 0;
+const kvGet = KV.get; let reads = 0;
+KV.get = async (k) => { reads++; return kvGet(k); };
+const runLog = await (await worker.fetch(new Request("https://x.dev/run?key=rk"), env, {})).text();
+KV.get = kvGet;
+const polled = sent().map((m) => m.recipient.comment_id);
+check("補掃：10 分鐘前漏掉的留言會補回", polled.includes("P2") && runLog.includes("private reply"));
+check("補掃：90 秒內的留給通知、45 分鐘前的不再查", !polled.includes("P1") && !polled.includes("P3") && reads <= 3);
 
 console.log(fail ? `\n${fail} 項失敗` : "\n全部通過");
 process.exit(fail ? 1 : 0);

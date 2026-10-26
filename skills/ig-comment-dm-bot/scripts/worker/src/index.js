@@ -61,7 +61,9 @@ export default {
 async function pollComments(env, log = []) {
   const token = await getToken(env);
   const media = await ig(`/me/media?fields=id&limit=${env.WATCH_POSTS}`, token);
-  const since = Date.now() - 7 * DAY * 1000; // 官方規定留言後 7 天內才能私訊
+  // 只回頭看 30 分鐘：通知漏掉的留言這段時間內就補到；看 7 天的話，處理過的舊留言每分鐘都要再查一次 KV，
+  // 關鍵字留言累積約 70 則就會用完免費方案每天 10 萬次讀取。IG 回傳的留言新的在前，看到更舊的就停。
+  const since = Date.now() - 30 * 60 * 1000;
 
   for (const m of media.data || []) {
     let next = `/${m.id}/comments?fields=id,text,timestamp,from{id,username}&limit=50`;

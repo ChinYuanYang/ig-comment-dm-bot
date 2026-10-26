@@ -1,6 +1,6 @@
 ---
 name: ig-comment-dm-bot
-version: 0.2.1
+version: 0.2.2
 description: >-
   IG 留言關鍵字自動私訊：讀者在貼文留言指定關鍵字（例如「懶人包」），自動私訊、在留言底下公開回覆，
   （可選）確認有追蹤後再傳檔案連結。自己架在 Meta App＋Cloudflare 免費方案，不用 ManyChat。
@@ -52,7 +52,7 @@ last-updated: 2026-10-26
 ## 判斷與工作流程
 
 0. **走終端機版之前先跑 `node -v`**：沒有 Node.js（或低於 v18）就帶使用者到 nodejs.org 裝 LTS 版，或改走網頁版。新手電腦常常沒有，卡在「找不到指令」最浪費時間。
-1. **程式不要從頭寫**。複製 `scripts/worker/` 到使用者的專案資料夾，只填 wrangler.toml 的 `__…__`。範本已處理：留言通知即時回、每分鐘補掃、多活動、追蹤門檻、公開回覆輪流三句、測試模式、每月換權杖、驗簽章。
+1. **程式不要從頭寫**。複製 `scripts/worker/` 到使用者的專案資料夾，只填 wrangler.toml 的 `__…__`。範本已處理：留言通知即時回、每分鐘補掃 30 分鐘內漏掉的留言（不重查舊留言，省 KV 讀取額度）、多活動、追蹤門檻、公開回覆輪流三句、測試模式、每月換權杖、驗簽章。
 2. **改了 `src/index.js` 就先跑** `node scripts/selftest.mjs`（在本 Skill 資料夾），全部通過才 deploy。
 3. **使用者本人按、AI 不代按**：註冊帳號、輸入密碼、同意條款（建立 App、接受測試員邀請、Cloudflare 授權）、發佈 App、公開隱私權政策頁、打開總開關。到這些步驟就停下來，說清楚要按哪一顆、在哪個視窗。
 4. **機密不落地**：權杖、App 密鑰只存在 `~/.config/<worker 名稱>/`（chmod 600）和 Cloudflare secret；用剪貼簿＋管線搬，用完清空剪貼簿；不進 Git、不出現在對話。
@@ -66,7 +66,7 @@ last-updated: 2026-10-26
 依序檢查，找到就停：
 
 1. 留言是不是**回覆別人的留言**（第二層）？範本只抓貼文底下第一層。
-2. 留言是否超過 7 天，或在**最新 3 篇以外**又剛好漏了通知？（`WATCH_POSTS` 可調大）
+2. 通知剛好漏掉，而且已經超過 30 分鐘？補掃只回頭看 30 分鐘，`/run` 也補不到，請讀者再留一次。留言在**最新 3 篇以外**也不會被補掃（`WATCH_POSTS` 可調大）。
 3. `npx -y wrangler@4 tail` 看有沒有 `private reply`；回傳 error code 10／subcode 2534022 → 讀者的回覆早於 `subscribed_apps` 訂閱，請他再回一次。
 4. 私訊可能在讀者的「訊息請求」資料夾。
 5. 剛改過 cron 頻率：Cloudflare 要幾分鐘才生效，期間用 `/run` 補跑。
@@ -84,7 +84,7 @@ last-updated: 2026-10-26
 
 ## 驗收標準
 
-- `node scripts/selftest.mjs` 全部通過（目前 17 項）。
+- `node scripts/selftest.mjs` 全部通過（目前 19 項）。
 - 小號實測：留言 → 幾秒內收到私訊與公開回覆；沒追蹤 → 按鈕 → 追蹤後拿到檔案。
 - `/run` 回 `no new comments`，`wrangler tail` 每分鐘有 `"* * * * *" … Ok`。
 - 權杖與密鑰沒有出現在 Git、對話或專案資料夾裡。
