@@ -1,6 +1,6 @@
 ---
 name: ig-comment-dm-bot
-version: 0.2.0
+version: 0.2.1
 description: >-
   IG 留言關鍵字自動私訊：讀者在貼文留言指定關鍵字（例如「懶人包」），自動私訊、在留言底下公開回覆，
   （可選）確認有追蹤後再傳檔案連結。自己架在 Meta App＋Cloudflare 免費方案，不用 ManyChat。
@@ -51,6 +51,7 @@ last-updated: 2026-10-26
 
 ## 判斷與工作流程
 
+0. **走終端機版之前先跑 `node -v`**：沒有 Node.js（或低於 v18）就帶使用者到 nodejs.org 裝 LTS 版，或改走網頁版。新手電腦常常沒有，卡在「找不到指令」最浪費時間。
 1. **程式不要從頭寫**。複製 `scripts/worker/` 到使用者的專案資料夾，只填 wrangler.toml 的 `__…__`。範本已處理：留言通知即時回、每分鐘補掃、多活動、追蹤門檻、公開回覆輪流三句、測試模式、每月換權杖、驗簽章。
 2. **改了 `src/index.js` 就先跑** `node scripts/selftest.mjs`（在本 Skill 資料夾），全部通過才 deploy。
 3. **使用者本人按、AI 不代按**：註冊帳號、輸入密碼、同意條款（建立 App、接受測試員邀請、Cloudflare 授權）、發佈 App、公開隱私權政策頁、打開總開關。到這些步驟就停下來，說清楚要按哪一顆、在哪個視窗。

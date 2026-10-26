@@ -11,7 +11,7 @@
 1. `skills/ig-comment-dm-bot/SKILL.md`：流程、判斷、排錯、驗收標準。以這份為準。
 2. 依使用者情況選一份架設指南：
    - 使用者不會用終端機，或你不能幫他執行指令 → `docs/網頁版架設指南.md`（有截圖）
-   - 你可以在他的電腦執行指令（Claude Code、Codex）→ `skills/ig-comment-dm-bot/references/setup-guide.md`
+   - 你可以在他的電腦執行指令（Claude Code、Codex）→ `skills/ig-comment-dm-bot/references/setup-guide.md`。開始前先跑 `node -v`：沒有 Node.js（或低於 v18）就帶他到 https://nodejs.org 裝 LTS 版；他不想裝就改走網頁版
 3. 程式：`skills/ig-comment-dm-bot/scripts/worker/`。不要從頭寫，也不要改程式。改了就先跑 `node skills/ig-comment-dm-bot/scripts/selftest.mjs`，全部通過才能部署。
 
 ## 帶的方式

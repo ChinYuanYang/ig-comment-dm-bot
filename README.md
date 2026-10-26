@@ -33,17 +33,26 @@
 
 ## 三種用法，挑一種
 
-| 你是誰 | 怎麼開始 |
-| :-- | :-- |
-| **用 ChatGPT、Gemini 的人**（最多人） | 打開 [`docs/給AI的說明.md`](./docs/給AI的說明.md)，整份複製，貼到新對話。AI 會像家教一樣，一次帶你做一步。 |
-| **用 Claude Code、Codex、Cursor 的人** | 跟你的 AI 說：「讀 `https://github.com/ChinYuanYang/ig-comment-dm-bot` 的 AGENTS.md，帶我架 IG 留言自動私訊。」 |
-| **想裝成 Skill 重複用的人** | 把 [`skills/ig-comment-dm-bot/`](./skills/ig-comment-dm-bot/) 整個資料夾放進 `~/.claude/skills/`（Codex 是 `~/.agents/skills/`），之後說「新增一個留言關鍵字活動」就會叫出來。 |
+| 你用的是 | AI 會怎麼做 | 怎麼開始 |
+| :-- | :-- | :-- |
+| **ChatGPT、Gemini、Claude 網頁版或 App**（只能聊天） | **AI 帶你做**：一次教一步，每顆按鈕你自己按 | 打開 [`docs/給AI的說明.md`](./docs/給AI的說明.md)，整份複製，貼到新對話 |
+| **Claude Code、Codex**（能用你電腦的終端機） | **AI 幫你做**：下載程式、部署、設定、測試都由它來；你只要登入、同意條款、按「發佈」這幾顆 | 把下面這句話貼給它 |
+| **想裝成 Skill 重複用** | 之後說「新增一個留言關鍵字活動」就會叫出來 | 把 [`skills/ig-comment-dm-bot/`](./skills/ig-comment-dm-bot/) 整個資料夾放進 `~/.claude/skills/`（Codex 是 `~/.agents/skills/`） |
+
+給 Claude Code、Codex 的那句話：
+
+```text
+讀 https://github.com/ChinYuanYang/ig-comment-dm-bot 的 AGENTS.md，帶我在自己的 IG 架留言關鍵字自動私訊。能幫我執行的步驟你直接做，需要我本人按的再告訴我。
+```
+
+> [!TIP]
+> 「AI 幫你做」需要電腦裝有 Node.js。AI 會先幫你檢查，沒有的話會教你到官網下載安裝（一直按「下一步」就好）；不想裝，就改用「AI 帶你做」，部署只是在 Cloudflare 網頁上複製貼上。
 
 想自己照著做，不透過 AI：看 [`docs/網頁版架設指南.md`](./docs/網頁版架設指南.md)，每一步都有實際畫面截圖。
 
 ---
 
-## 🗂 這份 Repo 有什麼？
+## Repo 裡有什麼
 
 | 檔案 | 它是什麼 | 誰會用到 |
 | :-- | :-- | :-- |
@@ -95,11 +104,11 @@ Meta 開發者帳號免費。Cloudflare 免費方案每天可以處理 10 萬次
 
 ---
 
-## 有問題或想回饋？
+## 卡住了怎麼辦
 
-- **卡住了**：先把畫面截圖、錯誤訊息，連同你做到第幾步，一起交給你的 AI。
-- **找到 bug、步驟跟畫面不一樣**：到 [Issues](https://github.com/ChinYuanYang/ig-comment-dm-bot/issues) 回報，寫清楚做到哪一步、預期和實際看到什麼。
-- 回報前，記得拿掉權杖、密鑰、Email 這些私人資料。
+- **先問你的 AI**：把畫面截圖、錯誤訊息，還有你做到第幾步，一起交給它。
+- **步驟跟畫面對不上、程式出錯**：開一個 [Issue](https://github.com/ChinYuanYang/ig-comment-dm-bot/issues) 告訴我，附上第幾步和你看到的畫面。
+- 貼截圖或錯誤訊息之前，先確認裡面沒有權杖、密鑰和你的信箱。
 
 ---
 
