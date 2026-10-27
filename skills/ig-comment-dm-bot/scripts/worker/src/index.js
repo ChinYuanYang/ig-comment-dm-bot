@@ -143,7 +143,9 @@ async function handleWebhook(body, env) {
         if (camp) await checkAndDeliver(uid, camp, true, env);
       } else if (ev.message?.text) {
         // 私訊裡打了關鍵字，或剛被請「回我一句」的人回了任何話
-        const pending = await env.KV.get(`p:${uid}`);
+        // 已經拿過那份的人，「等待中」紀錄不擦（擦掉也算一次 KV 寫入），改成這裡跳過
+        let pending = await env.KV.get(`p:${uid}`);
+        if (pending && (await env.KV.get(`s:${uid}:${pending}`)) === "sent") pending = null;
         const camp = matchCampaign(ev.message.text, env) || campaigns(env).find((c) => c.keyword === pending);
         if (camp) await checkAndDeliver(uid, camp, false, env);
       }
@@ -161,7 +163,6 @@ async function checkAndDeliver(uid, camp, fromButton, env) {
   if (ok) {
     await send({ recipient: { id: uid }, message: { text: TEXT.file(camp) } }, token);
     await env.KV.put(`s:${uid}:${camp.keyword}`, "sent", { expirationTtl: 90 * DAY });
-    await env.KV.delete(`p:${uid}`);
     console.log("file sent", uid, camp.keyword);
   } else {
     await send({ recipient: { id: uid }, message: buttons(fromButton ? TEXT.notYet : TEXT.follow(env), camp, env) }, token);

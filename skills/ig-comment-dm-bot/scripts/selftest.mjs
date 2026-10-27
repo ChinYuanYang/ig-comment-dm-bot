@@ -93,7 +93,12 @@ check("按了但還沒追蹤 → 提醒再按一次", sent()[0]?.message?.attach
 follows = true; calls.length = 0;
 await hook(tap("CHECK_FOLLOW|懶人包"));
 check("追蹤後 → 傳懶人包連結", sent()[0]?.message?.text?.includes("https://example.com/kit.pdf"));
-check("記成已拿過", store.get("s:U1:懶人包") === "sent" && !store.has("p:U1"));
+check("記成已拿過", store.get("s:U1:懶人包") === "sent");
+
+// 5b. 拿到後隨便再傳一句 → 不再重傳（等待紀錄不擦，省 KV 寫入）
+calls.length = 0;
+await hook(dm("謝謝"));
+check("拿到後再傳話 → 不重傳檔案", sent().length === 0);
 
 // 6. 拿過的人再留言 → 私訊直接給連結
 calls.length = 0;
