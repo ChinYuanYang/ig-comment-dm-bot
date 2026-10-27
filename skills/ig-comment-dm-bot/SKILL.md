@@ -1,6 +1,6 @@
 ---
 name: ig-comment-dm-bot
-version: 0.4.0
+version: 0.4.1
 description: >-
   IG 留言關鍵字自動私訊：讀者在貼文留言指定關鍵字（例如「懶人包」），自動私訊、在留言底下公開回覆，
   （可選）確認有追蹤後再傳檔案連結。自己架在 Meta App＋Cloudflare 免費方案，不用 ManyChat。

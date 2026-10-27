@@ -54,6 +54,22 @@
 
 ---
 
+## 上線之後：想改東西怎麼辦
+
+隔了幾天、開**新的對話**問 AI 之前，先把 [`docs/給AI的說明.md`](./docs/給AI的說明.md) 整份貼回去，再說「我已經架好 IG 小幫手了，現在想＿＿＿」。新的對話不記得你之前做過什麼。用 ChatGPT 專案、Gemini 的 Gem 或 Claude 專案把說明存起來，就不用每次貼。
+
+| 想做的事 | 在 Cloudflare 哪裡改 | AI 幫你什麼 |
+| :-- | :-- | :-- |
+| 新增一個關鍵字活動 | Worker →「Settings」→「Variables and Secrets」→ 編輯 `CAMPAIGNS` → 存檔 | 把新的一組寫成格式正確的文字，你直接貼上 |
+| 換檔案連結 | 同上，改 `CAMPAIGNS` 裡的 `file_url` | 同上 |
+| 暫停小幫手 | `ENABLED` 改成 `false` → 存檔 | 不太需要 |
+| 收到「出問題」的通知信 | 把信貼給 AI | 判斷原因；要補發時給你一個網址，用瀏覽器打開就會慢慢補 |
+| 升級新版程式 | Worker →「Edit code」→ 整份貼上新程式 →「Deploy」 | 告訴你去哪裡複製（[`index.js`](./skills/ig-comment-dm-bot/scripts/worker/src/index.js)） |
+
+用 Claude Code、Codex 的人不用貼說明，直接說「讀這個 repo 的 AGENTS.md，我已經架好了，想＿＿＿」就好。
+
+---
+
 ## Repo 裡有什麼
 
 | 檔案 | 它是什麼 | 誰會用到 |
