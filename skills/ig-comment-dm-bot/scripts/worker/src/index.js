@@ -5,6 +5,32 @@
 const API = "https://graph.instagram.com/v24.0";
 const DAY = 86400;
 
+// ── 記事本：誰拿過檔案、哪則留言回過了 ─────────────────────────
+// 有綁 D1（env.DB）就寫 D1：免費方案每天 10 萬列，KV 只有 1,000 次。沒綁就照舊用 KV。
+// 換到 D1 之前寫在 KV 的紀錄照樣讀得到（D1 查不到就回頭看 KV），所以不用搬資料。
+let tableReady = false;
+async function memGet(env, k) {
+  if (env.DB) {
+    if (!tableReady) {
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, exp INTEGER NOT NULL)").run();
+      tableReady = true;
+    }
+    const row = await env.DB.prepare("SELECT v FROM kv WHERE k = ? AND exp > ?").bind(k, Date.now()).first();
+    if (row) return row.v;
+  }
+  return env.KV.get(k);
+}
+
+async function memPut(env, k, v, ttl) {
+  if (!env.DB) return env.KV.put(k, v, { expirationTtl: ttl });
+  await env.DB.prepare("INSERT OR REPLACE INTO kv (k, v, exp) VALUES (?, ?, ?)").bind(k, v, Date.now() + ttl * 1000).run();
+}
+
+// 每月換權杖時順便清掉過期的紀錄
+async function memCleanup(env) {
+  if (env.DB) await env.DB.prepare("DELETE FROM kv WHERE exp < ?").bind(Date.now()).run();
+}
+
 // ── 訊息文案（活動可以在 CAMPAIGNS 裡用 ask_text／file_text 覆寫）──────────
 const TEXT = {
   ask: (c) => c.ask_text || `謝謝你想要${c.name} 🌻\n回我一句「${c.keyword}」，我就把檔案傳給你`,
@@ -65,7 +91,7 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    if (event.cron === env.REFRESH_CRON) ctx.waitUntil(refreshToken(env));
+    if (event.cron === env.REFRESH_CRON) ctx.waitUntil(refreshToken(env).then(() => memCleanup(env)));
     else ctx.waitUntil(guard(env, "poll", () => pollComments(env)));
   },
 };
@@ -104,11 +130,11 @@ async function handleComment(c, token, env, log = [], opts = {}) {
   const camp = matchCampaign(c.text, env);
   if (!camp) return;
   if (!c.from || c.from.id === env.IG_USER_ID || !allowed(c.from.id, env)) return;
-  if (await env.KV.get(`c:${c.id}`)) return;
-  await env.KV.put(`c:${c.id}`, "1", { expirationTtl: 8 * DAY });
+  if (await memGet(env, `c:${c.id}`)) return;
+  await memPut(env, `c:${c.id}`, "1", 8 * DAY);
 
   // 不檢查追蹤，或這個人已經拿過這份檔案 → 直接給；否則先請他回一句（回覆才能查追蹤）
-  const already = (await env.KV.get(`s:${c.from.id}:${camp.keyword}`)) === "sent";
+  const already = (await memGet(env, `s:${c.from.id}:${camp.keyword}`)) === "sent";
   const direct = !followGate(env) || already;
   const r = await send({ recipient: { comment_id: c.id }, message: { text: direct ? TEXT.file(camp) : TEXT.ask(camp) } }, token);
   const line = `private reply ${c.from.username} [${camp.keyword}] ${direct ? "file" : "ask"} ${JSON.stringify(r).slice(0, 160)}`;
@@ -116,8 +142,8 @@ async function handleComment(c, token, env, log = [], opts = {}) {
   log.push(line);
   if (!r.recipient_id) return true;
 
-  if (direct) await env.KV.put(`s:${r.recipient_id}:${camp.keyword}`, "sent", { expirationTtl: 90 * DAY });
-  else await env.KV.put(`p:${r.recipient_id}`, camp.keyword, { expirationTtl: 7 * DAY });
+  if (direct) await memPut(env, `s:${r.recipient_id}:${camp.keyword}`, "sent", 90 * DAY);
+  else await memPut(env, `p:${r.recipient_id}`, camp.keyword, 7 * DAY);
 
   if (opts.publicReply === false) return true;
   const pick = TEXT.publicReplies[Number(c.id.slice(-3)) % TEXT.publicReplies.length];
@@ -144,8 +170,8 @@ async function handleWebhook(body, env) {
       } else if (ev.message?.text) {
         // 私訊裡打了關鍵字，或剛被請「回我一句」的人回了任何話
         // 已經拿過那份的人，「等待中」紀錄不擦（擦掉也算一次 KV 寫入），改成這裡跳過
-        let pending = await env.KV.get(`p:${uid}`);
-        if (pending && (await env.KV.get(`s:${uid}:${pending}`)) === "sent") pending = null;
+        let pending = await memGet(env, `p:${uid}`);
+        if (pending && (await memGet(env, `s:${uid}:${pending}`)) === "sent") pending = null;
         const camp = matchCampaign(ev.message.text, env) || campaigns(env).find((c) => c.keyword === pending);
         if (camp) await checkAndDeliver(uid, camp, false, env);
       }
@@ -162,7 +188,7 @@ async function checkAndDeliver(uid, camp, fromButton, env) {
   }
   if (ok) {
     await send({ recipient: { id: uid }, message: { text: TEXT.file(camp) } }, token);
-    await env.KV.put(`s:${uid}:${camp.keyword}`, "sent", { expirationTtl: 90 * DAY });
+    await memPut(env, `s:${uid}:${camp.keyword}`, "sent", 90 * DAY);
     console.log("file sent", uid, camp.keyword);
   } else {
     await send({ recipient: { id: uid }, message: buttons(fromButton ? TEXT.notYet : TEXT.follow(env), camp, env) }, token);
@@ -261,10 +287,10 @@ async function guard(env, where, fn) {
     await fn();
   } catch (e) {
     console.log(where, "error", e.stack);
-    const kv = /KV|429|limit/i.test(String(e.message));
+    const kv = /KV|D1|429|limit/i.test(String(e.message));
     ALERTS.push({
       kind: kv ? "kv" : "crash",
-      subject: kv ? "Cloudflare 資料庫（KV）今天的免費額度用完了" : "小幫手程式出錯",
+      subject: kv ? "Cloudflare 資料庫（KV／D1）今天的免費額度用完了" : "小幫手程式出錯",
       detail: `${where}：${e.message}`,
     });
   } finally {
@@ -293,7 +319,7 @@ async function flushAlerts(env, force = false) {
       "你可以：",
       "1. 把這封信貼給你的 AI，請它查原因、補發漏掉的人（留言後 7 天內都補得到；慢慢補：/run?key=…&minutes=分鐘數&delay=6000&limit=8）。",
       "2. 如果是 Meta 擋住：用個人 FB 身分（不是粉專身分）打開 https://developers.facebook.com/apps/ ，看要不要確認帳號。",
-      "3. 如果是 Cloudflare 額度用完：每天 UTC 00:00（台灣早上 8 點）自動恢復；常發生就考慮升級 Cloudflare 付費方案。",
+      "3. 如果是 Cloudflare 額度用完：每天 UTC 00:00（台灣早上 8 點）自動恢復；還沒綁 D1 的話先綁（指南第 6 步），一天可以寫 10 萬筆；綁了還是常發生，再考慮升級 Cloudflare 付費方案。",
       "",
       "（同一種問題 1 小時內只寄一次）",
     ].join("\n");

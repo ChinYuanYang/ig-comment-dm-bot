@@ -12,7 +12,8 @@
 | 權杖（Token） | 一把鑰匙，讓小幫手可以進你的 IG 做事。**只能放進 Cloudflare，不能給任何人** |
 | 密鑰（Secret） | 另一種鑰匙，用來確認敲門的真的是 Meta |
 | Cloudflare Worker | 一台免費、24 小時幫你值班的小電腦，程式放在這裡 |
-| KV | 小電腦裡的筆記本，記住「傳過誰了」 |
+| KV | 小電腦裡的小抽屜，放那把每月換新的鑰匙 |
+| D1 | 小電腦裡的記事本，記住「傳過誰了」，一天可以寫 10 萬筆 |
 | Webhook | 門鈴。有人留言或私訊，Meta 就按門鈴叫小幫手 |
 | Cron（排程） | 鬧鐘。每分鐘響一次，小幫手就去看有沒有漏掉的留言 |
 | 測試小號 | 你另外一個 IG 帳號，假裝成讀者來測試 |
@@ -83,8 +84,11 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 ## 第 6 步：資料庫、設定、排程
 
 1. 左側「Storage & Databases」→「KV」→「Create」，名稱 `kit-bot-kv`。
-2. 回到 Worker →「Settings」（或「Bindings」）→ 新增 **KV namespace** 綁定：變數名稱一定要叫 `KV`，選剛剛的 `kit-bot-kv`。
-3. 「Settings」→「Variables and Secrets」，逐一新增：
+2. 左側「Storage & Databases」→「D1 SQL Database」→「Create Database」，名稱 `kit-bot-db`，按「Create」。裡面不用建任何表，程式第一次用到會自己建。
+3. 回到 Worker →「Bindings」→「Add binding」，新增兩個綁定：
+   - **KV namespace**：變數名稱一定要叫 `KV`，選 `kit-bot-kv`。
+   - **D1 database**：變數名稱一定要叫 `DB`，選 `kit-bot-db`。
+4. 「Settings」→「Variables and Secrets」，逐一新增：
 
 | 名稱 | 類型 | 填什麼 |
 |---|---|---|
@@ -111,8 +115,10 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 ]
 ```
 
-4. 「Settings」→「Triggers」→「Cron Triggers」新增兩個：`* * * * *`（每分鐘補掃）、`0 3 1 * *`（每月換權杖）。
-5. 存檔或 Deploy，讓設定生效。
+5. 「Settings」→「Triggers」→「Cron Triggers」新增兩個：`* * * * *`（每分鐘補掃）、`0 3 1 * *`（每月換權杖）。
+6. 存檔或 Deploy，讓設定生效。
+
+> 為什麼要 KV 和 D1 兩個？KV 免費方案一天只能寫 1,000 次，大約只夠 330 位讀者；D1 一天可以寫 10 萬筆。記「傳過誰了」放 D1，KV 只放每月換一次的鑰匙。
 
 ## 第 7 步：一鍵設定頁
 
@@ -165,6 +171,8 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 - **權杖過期**：程式每月 1 號自動換新（60 天有效）。如果 Worker 停了超過 60 天，要回第 3 步重新產生，再更新 `IG_TOKEN`。
 - **小幫手停了一段時間，想補回漏掉的人**：打開 `https://…workers.dev/run?key=<RUN_KEY>&minutes=<往回看幾分鐘>&delay=6000&limit=8`，每次慢慢補 8 個人，回傳「no new comments」就補完了。留言後 7 天內都補得到。
 - **為什麼要慢慢補**：一口氣發太多私訊和留言回覆，可能被 Meta 當成異常活動，鎖住開發者帳號（實際發生過）。
+- **一天最多服務幾位讀者**：有綁 D1 的話，一天大約 1.6 萬位（D1 每天 10 萬列，每位讀者約用 6 列）。只綁 KV 的話，大約 330 位（關掉追蹤門檻約 500 位），超過的讀者會默默收不到。
+- **我之前架好時只有 KV，想加 D1**：照第 6 步的第 2、3 點建 D1、綁成 `DB`，再把最新版程式整份貼回去部署。以前的紀錄不用搬，程式在 D1 找不到時會回頭看 KV。
 - **暫停**：`ENABLED` 改 `false`。
 - **新增活動**：在 `CAMPAIGNS` 多加一組，存檔，用小號測新關鍵字。
 

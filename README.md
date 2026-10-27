@@ -87,22 +87,17 @@
 <details>
 <summary>真的完全免費嗎？</summary>
 
-Meta 開發者帳號免費。Cloudflare 免費方案每天可以處理 10 萬次請求，一般帳號用不完。真正會先用完的是「資料庫寫入次數」，看下一題。
+Meta 開發者帳號免費。Cloudflare 免費方案每天可以處理 10 萬次請求，一般帳號用不完。資料庫的額度看下一題。
 </details>
 
 <details>
 <summary>一天最多可以服務幾位讀者？</summary>
 
-大約 **300～500 位**。
+照指南把 **D1** 綁上去的話，一天**上萬位**都沒問題。
 
-小幫手用 Cloudflare 免費的小資料庫，記下「這則留言回過了」「這個人拿過檔案了」。這個資料庫每天只能寫入 1,000 次，每位讀者大約會用掉 2～3 次：
+小幫手要記住「這則留言回過了」「這個人拿過檔案了」，每位讀者大約寫 3 筆紀錄。這些紀錄放在 Cloudflare 免費的 D1 資料庫，一天可以寫 10 萬列；實測每筆紀錄算 2 列，所以一天大約 1.6 萬位讀者。[Cloudflare D1 價目](https://developers.cloudflare.com/d1/platform/pricing/)
 
-- 打開「要追蹤才給」：一天大約 330 位
-- 關掉「要追蹤才給」：一天大約 500 位
-
-額度每天重新計算。超過的那一天，後面才留言的讀者可能收不到私訊，你這邊也不會看到錯誤訊息。
-
-如果預期某一天會超過（例如請大帳號幫你分享），先把 Cloudflare 升級成付費方案（每月 5 美元起），寫入額度會變成每月 100 萬次，程式不用改。[Cloudflare KV 用量限制](https://developers.cloudflare.com/kv/platform/limits/)
+沒綁 D1 的話，紀錄會改寫在 KV，一天只能寫 1,000 次，大約 330 位讀者（關掉「要追蹤才給」約 500 位）。超過的讀者會默默收不到私訊。v0.4.0 以前架好的人，照指南第 6 步補一個 D1 就好，以前的紀錄不用搬。[Cloudflare KV 用量限制](https://developers.cloudflare.com/kv/platform/limits/)
 </details>
 
 <details>

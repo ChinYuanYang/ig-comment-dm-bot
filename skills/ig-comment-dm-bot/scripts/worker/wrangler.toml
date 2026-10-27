@@ -24,6 +24,14 @@ CAMPAIGNS = '''[
 # 機密（不寫在這裡，用 npx wrangler secret put 設定）：IG_TOKEN、RUN_KEY、APP_SECRET、IG_APP_SECRET
 # 選配機密：ALERT_URL（出問題寄信用的 Google Apps Script 網址，見 references/alert-mailer.gs）
 
+# KV：放每月換新的權杖（一個月寫一次）
 [[kv_namespaces]]
 binding = "KV"
 id = "__KV_ID__"
+
+# D1：記「傳過誰了、哪則留言回過了」。免費方案每天 10 萬列寫入，KV 只有 1,000 次（約 330 位讀者）
+# 沒綁 D1 程式也能跑，會改記在 KV；以前記在 KV 的紀錄，綁上 D1 後照樣讀得到
+[[d1_databases]]
+binding = "DB"
+database_name = "__WORKER_NAME__-db"
+database_id = "__D1_ID__"

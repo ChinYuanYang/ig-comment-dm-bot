@@ -57,7 +57,7 @@
 
 1. **使用者**：https://dash.cloudflare.com/sign-up 免費註冊。
 2. **AI**：在 `scripts/worker/` 執行 `npx -y wrangler@4 login --browser=false`（背景執行，輸出寫到檔案），讀出授權網址，在使用者的瀏覽器打開。**使用者**按「Authorize」。⚠️ 有多個 Chrome 設定檔時，要開在登入 Cloudflare 的那一個。
-3. **AI**：`npx -y wrangler@4 kv namespace create KV` → 把 id 填進 wrangler.toml。
+3. **AI**：`npx -y wrangler@4 kv namespace create KV`、`npx -y wrangler@4 d1 create <worker 名稱>-db` → 把兩個 id 填進 wrangler.toml（`__KV_ID__`、`__D1_ID__`）。D1 的表不用建，程式第一次用到會自己建。
 4. **AI**：填 wrangler.toml 其他 `__…__`（`HUB_VERIFY` 自己取一個英文字串；`ENABLED` 先留 "false"）。
 5. **AI**：設定機密（都用管線餵進去，不要出現在對話裡）：
    - `IG_TOKEN`：第 4 步的權杖
@@ -93,7 +93,7 @@
 1. **使用者**：用想收信的 Google 帳號打開 https://script.new ，**AI** 告訴他貼上 `references/alert-mailer.gs`、把 `TO` 換成他的信箱。
 2. **使用者**：部署 → 新增部署作業 → 網頁應用程式（執行身分「我」、存取「所有人」）→ 授權（「未驗證的應用程式」按進階 → 前往）。
 3. **AI**：拿到網址後 `printf '%s' '<網址>' | npx -y wrangler@4 secret put ALERT_URL`，再打開 `/alert-test?key=<RUN_KEY>` 確認收得到信。
-4. 之後遇到 IG 錯誤 190／200／368／限流，或 KV 額度用完、程式出錯，會寄信，同類 1 小時一封。
+4. 之後遇到 IG 錯誤 190／200／368／限流，或資料庫（KV／D1）額度用完、程式出錯，會寄信，同類 1 小時一封。
 
 補發停擺期間漏掉的人：`/run?key=<RUN_KEY>&minutes=<分鐘>&delay=6000&limit=8`，多跑幾次直到回 `no new comments`。慢慢補，避免又被當成異常活動。
 

@@ -1,6 +1,9 @@
-// 範本自我測試：不連 IG、不連 Cloudflare，用假的 KV 與假的 IG 回應跑完整流程。
+// 範本自我測試：不連 IG、不連 Cloudflare，用假的 KV／D1 與假的 IG 回應跑完整流程。
 // 用法：node scripts/selftest.mjs（改過 worker/src/index.js 之後一定要跑）
+// 會跑兩輪：先只用 KV，再加上 D1（記事本寫 D1、舊紀錄還在 KV），兩輪都通過才算過。
 import { createHmac } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import worker from "./worker/src/index.js";
 
 const SECRET = "test-secret";
@@ -31,12 +34,37 @@ globalThis.fetch = async (input, init = {}) => {
   return { json: async () => json };
 };
 
+const USE_D1 = process.env.SELFTEST_D1 === "1";
+console.log(USE_D1 ? "\n── 第 2 輪：KV＋D1 ──" : "── 第 1 輪：只用 KV ──");
+
 const store = new Map();
+const kvPuts = [];
 const KV = {
   get: async (k) => store.get(k) ?? null,
-  put: async (k, v) => void store.set(k, v),
+  put: async (k, v) => { kvPuts.push(k); store.set(k, v); },
   delete: async (k) => void store.delete(k),
 };
+
+// 假的 D1：只認得程式用到的四種 SQL
+const d1 = new Map();
+let d1Reads = 0;
+function dbRun(sql, a) {
+  if (sql.startsWith("CREATE")) return {};
+  if (sql.startsWith("INSERT")) { d1.set(a[0], { v: a[1], exp: a[2] }); return {}; }
+  if (sql.startsWith("DELETE")) { for (const [k, r] of d1) if (r.exp < a[0]) d1.delete(k); return {}; }
+  throw new Error("假 D1 不認得：" + sql);
+}
+const DB = {
+  prepare: (sql) => ({
+    run: async () => dbRun(sql, []),
+    bind: (...a) => ({
+      run: async () => dbRun(sql, a),
+      first: async () => { d1Reads++; const r = d1.get(a[0]); return r && r.exp > a[1] ? { v: r.v } : null; },
+    }),
+  }),
+};
+// 記事本裡的值：D1 有就看 D1，沒有看 KV（跟程式的讀法一樣）
+const mem = (k) => d1.get(k)?.v ?? store.get(k);
 
 const env = {
   KV, IG_USER_ID: "OWNER", IG_USERNAME: "your.account", ENABLED: "true", TEST_USERS: "",
@@ -47,6 +75,7 @@ const env = {
     { keyword: "履歷", name: "《履歷模板》", file_url: "https://example.com/cv.pdf" },
   ]),
 };
+if (USE_D1) env.DB = DB;
 
 async function hook(entry, secret = SECRET) {
   const raw = JSON.stringify({ object: "instagram", entry: [entry] });
@@ -71,7 +100,7 @@ calls.length = 0;
 await hook(comment("C1", "我要 懶人包！"));
 check("留言觸發私訊（請他回一句）", sent()[0]?.recipient?.comment_id === "C1" && sent()[0].message.text.includes("回我一句「懶人包」"));
 check("留言底下公開回覆", calls.some((c) => c.url.includes("/C1/replies")));
-check("記住他在等懶人包", store.get("p:U1") === "懶人包");
+check("記住他在等懶人包", mem("p:U1") === "懶人包");
 
 // 2. 同一則留言重複通知 → 不重複回
 calls.length = 0;
@@ -93,7 +122,7 @@ check("按了但還沒追蹤 → 提醒再按一次", sent()[0]?.message?.attach
 follows = true; calls.length = 0;
 await hook(tap("CHECK_FOLLOW|懶人包"));
 check("追蹤後 → 傳懶人包連結", sent()[0]?.message?.text?.includes("https://example.com/kit.pdf"));
-check("記成已拿過", store.get("s:U1:懶人包") === "sent");
+check("記成已拿過", mem("s:U1:懶人包") === "sent");
 
 // 5b. 拿到後隨便再傳一句 → 不再重傳（等待紀錄不擦，省 KV 寫入）
 calls.length = 0;
@@ -150,10 +179,11 @@ pollComments = [
   { id: "P3", text: "懶人包", timestamp: ago(45), from: { id: "U22", username: "c" } },
 ];
 calls.length = 0;
-const kvGet = KV.get; let reads = 0;
-KV.get = async (k) => { reads++; return kvGet(k); };
+const kvGet = KV.get; let reads = 0; const d1Before = d1Reads;
+if (!USE_D1) KV.get = async (k) => { reads++; return kvGet(k); };
 const runLog = await (await worker.fetch(new Request("https://x.dev/run?key=rk"), env, {})).text();
 KV.get = kvGet;
+if (USE_D1) reads = d1Reads - d1Before;
 const polled = sent().map((m) => m.recipient.comment_id);
 check("補掃：10 分鐘前漏掉的留言會補回", polled.includes("P2") && runLog.includes("private reply"));
 check("補掃：90 秒內的留給通知、45 分鐘前的不再查", !polled.includes("P1") && !polled.includes("P3") && reads <= 3);
@@ -182,16 +212,32 @@ check("Meta 擋住 → 寄 1 封信、不重複寄", mails.length === 1 && mails
 
 // 16. KV 額度用完（寫入失敗）→ 寄信
 {
-  const realPut = KV.put;
+  const realPut = KV.put, realPrepare = DB.prepare;
   KV.put = async () => { throw new Error("KV PUT failed: 429 Too Many Requests"); };
+  DB.prepare = (sql) => (sql.startsWith("INSERT") ? { bind: () => ({ run: async () => { throw new Error("D1_ERROR: Exceeded maximum DB rows written"); } }) } : realPrepare(sql));
   await hook(comment("C10", "懶人包", "U20"));
-  KV.put = realPut;
-  check("KV 寫不進去 → 寄「額度用完」的信", mails.some((m) => m.subject.includes("KV")));
+  KV.put = realPut; DB.prepare = realPrepare;
+  check("資料庫寫不進去 → 寄「額度用完」的信", mails.some((m) => m.subject.includes("額度用完")));
 }
 
 // 17. /alert-test 一定寄得出去
 const at = await (await worker.fetch(new Request("https://x.dev/alert-test?key=rk"), env, {})).text();
 check("/alert-test 寄出測試信", at.includes("test: ok") && mails.some((m) => m.subject.includes("測試信")));
 
-console.log(fail ? `\n${fail} 項失敗` : "\n全部通過");
-process.exit(fail ? 1 : 0);
+// 18.（D1 輪）記事本只寫 D1；換 D1 之前記在 KV 的人照樣認得
+if (USE_D1) {
+  check("記事本的紀錄都寫進 D1、沒寫 KV", d1.size > 0 && !kvPuts.some((k) => /^[csp]:/.test(k)));
+  store.set("s:OLD:懶人包", "sent"); calls.length = 0;
+  await hook(comment("C11", "懶人包", "OLD"));
+  check("換 D1 前拿過的人再留言 → 直接給連結", sent()[0]?.message?.text?.includes("kit.pdf"));
+  d1.set("x:old", { v: "1", exp: Date.now() - 1000 });
+  const waits = [];
+  await worker.scheduled({ cron: env.REFRESH_CRON }, env, { waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+  check("每月換權杖時清掉過期紀錄", !d1.has("x:old") && d1.has("s:U1:懶人包"));
+}
+
+if (fail) { console.log(`\n${fail} 項失敗`); process.exit(1); }
+if (USE_D1) { console.log("\n全部通過"); process.exit(0); }
+const second = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { env: { ...process.env, SELFTEST_D1: "1" }, stdio: "inherit" });
+process.exit(second.status ?? 1);
