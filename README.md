@@ -21,7 +21,9 @@
 > 新增「上線之後：想改東西怎麼辦」；AI 開場先問你是從頭架，還是已經架好、想改設定。
 >
 > 已經架好的人怎麼更新、每一版改了什麼 👉 [CHANGELOG.md](./CHANGELOG.md)
-> 想在出新版時收到通知：按右上角 **Watch → Custom → Releases**。
+> 想在出新版時收到通知：
+> - **有 GitHub 帳號**：登入後回到 [repo 首頁](https://github.com/ChinYuanYang/ig-comment-dm-bot)，在 repo 名稱那一排按 **Watch**（沒登入時叫 Notifications；手機版在名稱下方）→ **Custom** → 勾 **Releases** → **Apply**。
+> - **沒有 GitHub 帳號**：用 RSS 閱讀器訂閱 `https://github.com/ChinYuanYang/ig-comment-dm-bot/releases.atom`
 
 ---
 
