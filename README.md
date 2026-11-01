@@ -17,9 +17,8 @@
 > 全程用 Meta 官方 API 和 Cloudflare 免費方案，只能用在**你自己的** IG 帳號。
 
 > [!WARNING]
-> **2026-11-01 更新：Meta 新建的 App 改走 Unified Login，指南和程式已經跟著改，但新流程還沒有用真的 App 實測過。**
-> 這版照 Meta 官方文件寫好、假資料測試通過。最不確定的是發佈後讀不讀得到一般讀者的留言、要不要商家驗證，如果 Meta 不放行，可能會做到一半卡住。
-> 想試的話歡迎，卡住請到 [Issues](https://github.com/ChinYuanYang/ig-comment-dm-bot/issues) 回報，貼畫面前先遮掉權杖和帳號。
+> **2026-11-01 更新：Meta 新建的 App 改走 Unified Login，指南和程式已經跟著改，但新流程還沒有用真的 App 實測過，所以可能會做到一半卡住。**
+> 如果測試過程有問題，歡迎隨時截圖，[私訊 IG @career.honesttree](https://www.instagram.com/career.honesttree/) 跟我分享，截圖前先遮掉權杖和帳號。
 > 已經架好的舊 App 不受影響，不用做任何事。
 
 > [!TIP]
