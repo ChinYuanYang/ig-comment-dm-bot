@@ -21,15 +21,16 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.startsWith("https://mail.test")) { mails.push(JSON.parse(init.body)); return { text: async () => "ok" }; }
   if (igError) return { json: async () => ({ error: igError }) };
   const body = init.body ? String(init.body) : "";
-  calls.push({ url, body });
+  calls.push({ url, body, headers: init.headers });
   let json = {};
-  if (url.includes("/me/messages")) json = { recipient_id: "U1", message_id: "m" };
+  if (url.includes("/me/messages") || url.includes("/OWNER/messages")) json = { recipient_id: "U1", message_id: "m" };
   else if (url.includes("/replies")) json = { id: "r" };
   else if (url.includes("is_user_follow_business")) json = { is_user_follow_business: follows };
-  else if (url.includes("/me/media")) json = { data: [{ id: "M1" }] };
+  else if (url.includes("/me/media") || url.includes("/OWNER/media")) json = { data: [{ id: "M1" }] };
   else if (url.includes("/me?fields=user_id")) json = { user_id: "OWNER", username: "your.account", account_type: "BUSINESS" };
+  else if (url.includes("/me/assigned_instagram_accounts")) json = { data: [{ id: "OTHER", username: "other.brand" }, { id: "OWNER", username: "your.account" }] };
   else if (url.includes("subscribed_apps")) json = { success: true };
-  else if (url.includes("/me/conversations")) json = { data: [{ participants: { data: [{ username: "your.account", id: "OWNER" }, { username: "alt.account", id: "ALT1" }] } }] };
+  else if (url.includes("/me/conversations") || url.includes("/OWNER/conversations")) json = { data: [{ participants: { data: [{ username: "your.account", id: "OWNER" }, { username: "alt.account", id: "ALT1" }] } }] };
   else if (url.includes("/M1/comments")) json = { data: pollComments };
   return { json: async () => json };
 };
@@ -90,7 +91,7 @@ async function hook(entry, secret = SECRET) {
 const comment = (id, text, from = "U1") => ({ changes: [{ field: "comments", value: { id, text, from: { id: from, username: "reader" } } }] });
 const dm = (text, from = "U1") => ({ messaging: [{ sender: { id: from }, message: { text } }] });
 const tap = (payload, from = "U1") => ({ messaging: [{ sender: { id: from }, postback: { payload } }] });
-const sent = () => calls.filter((c) => c.url.includes("/me/messages")).map((c) => JSON.parse(c.body));
+const sent = () => calls.filter((c) => c.url.includes("/me/messages") || c.url.includes("/OWNER/messages")).map((c) => JSON.parse(c.body));
 
 let fail = 0;
 function check(name, cond) { console.log(`${cond ? "✅" : "❌"} ${name}`); if (!cond) fail++; }
@@ -236,6 +237,56 @@ if (USE_D1) {
   await Promise.all(waits);
   check("每月換權杖時清掉過期紀錄", !d1.has("x:old") && d1.has("s:U1:懶人包"));
 }
+
+// 19. 舊 App（沒填 API_MODE）：路一條都不變
+calls.length = 0; store.delete("s:U30:懶人包"); store.delete("c:L1"); d1.delete("c:L1");
+await hook(comment("L1", "懶人包", "U30"));
+check("舊 App：照舊打 graph.instagram.com/v24.0/me/messages", calls[0]?.url === "https://graph.instagram.com/v24.0/me/messages");
+
+// 20. 新 App（API_MODE=unified）：換主機、/me 換成帳號編號、權杖不每月換
+env.API_MODE = "unified";
+store.set("token", "old-ig-token");
+const fb = () => calls.every((c) => c.url.startsWith("https://graph.facebook.com/v26.0/"));
+const tokenSent = (c) => c.url.includes("access_token=tok") || c.headers?.Authorization === "Bearer tok";
+
+calls.length = 0; follows = true;
+await hook({ changes: [{ field: "comments", value: { comment_id: "F1", text: "懶人包", from: { id: "U40", username: "reader" }, media: { id: "M1" } } }] });
+check("新 App：認得 comment_id、私訊打 /{IG 編號}/messages", calls[0]?.url === "https://graph.facebook.com/v26.0/OWNER/messages" && sent()[0]?.recipient?.comment_id === "F1");
+check("新 App：公開回覆也走 graph.facebook.com", calls.some((c) => c.url.includes("/F1/replies")) && fb());
+check("新 App：不會拿舊 App 留在 KV 的權杖", calls.every(tokenSent));
+
+calls.length = 0;
+await hook(dm("懶人包", "U40"));
+check("新 App：查追蹤後傳檔案", calls.some((c) => c.url.includes("/U40?fields=is_user_follow_business")) && sent()[0]?.message?.text?.includes("kit.pdf") && fb());
+
+const realId = env.IG_USER_ID;
+env.IG_USER_ID = "0"; calls.length = 0;
+const su2 = await (await worker.fetch(new Request("https://x.dev/setup?key=rk"), env, {})).text();
+const subCall = calls.find((c) => c.url.includes("subscribed_apps"));
+check("新 App：/setup 用分享清單挑對帳號（IG_USER_ID 還是 0 也行）", su2.includes("IG_USER_ID 請填：OWNER") && su2.includes("alt.account：ALT1") && subCall?.url.includes("/OWNER/subscribed_apps") && fb());
+check("新 App：/setup 連留言通知一起訂閱", new URLSearchParams(subCall?.body).get("subscribed_fields").split(",").includes("comments"));
+env.IG_USER_ID = realId;
+
+pollComments = [{ id: "F2", text: "懶人包", timestamp: ago(10), from: { id: "U41", username: "d" } }];
+calls.length = 0;
+const run2 = await (await worker.fetch(new Request("https://x.dev/run?key=rk"), env, {})).text();
+check("新 App：補掃打 /{IG 編號}/media", calls[0]?.url.startsWith("https://graph.facebook.com/v26.0/OWNER/media") && run2.includes("private reply") && fb());
+
+calls.length = 0;
+{
+  const waits = [];
+  await worker.scheduled({ cron: env.REFRESH_CRON }, env, { waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+}
+check("新 App：每月排程不去換權杖", calls.length === 0 && store.get("token") === "old-ig-token");
+
+// 21. 權杖對不上模式 → /setup 提醒看 API_MODE
+igError = { code: 190, message: "Invalid token" };
+const su3 = await (await worker.fetch(new Request("https://x.dev/setup?key=rk"), env, {})).text();
+igError = null;
+check("權杖有問題 → /setup 提醒檢查 API_MODE", su3.includes("權杖有問題") && su3.includes("API_MODE"));
+delete env.API_MODE;
+store.delete("token");
 
 if (fail) { console.log(`\n${fail} 項失敗`); process.exit(1); }
 if (USE_D1) { console.log("\n全部通過"); process.exit(0); }

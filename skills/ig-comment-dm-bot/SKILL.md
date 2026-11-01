@@ -1,6 +1,6 @@
 ---
 name: ig-comment-dm-bot
-version: 0.4.1
+version: 0.5.0
 description: >-
   IG 留言關鍵字自動私訊：讀者在貼文留言指定關鍵字（例如「懶人包」），自動私訊、在留言底下公開回覆，
   （可選）確認有追蹤後再傳檔案連結。自己架在 Meta App＋Cloudflare 免費方案，不用 ManyChat。
@@ -9,7 +9,7 @@ description: >-
   不適用：Facebook 粉專留言自動回覆、Threads、只要回覆一般問答的客服機器人、
   要服務「別人的」IG 帳號（那要 Meta 送審與商家驗證），以及寫 IG 貼文文案本身（用 ig-carousel-script）。
 user-invocable: true
-last-updated: 2026-10-26
+last-updated: 2026-11-01
 ---
 
 # IG 留言關鍵字自動私訊
@@ -39,6 +39,20 @@ last-updated: 2026-10-26
 | 出問題寄信（選配） | 架設最後一步做：`references/alert-mailer.gs` 部署成網頁應用程式，網址存成 Secret `ALERT_URL`，`/alert-test` 測試 |
 | 讀者說沒收到 | 見下方「排錯」 |
 
+## 先分清楚是新 App 還是舊 App（2026-11-01）
+
+Meta 新建的 App 不能再用 Instagram 登入，只能走 Unified Login。看設定頁就知道是哪一種：
+
+| | 新 App | 舊 App |
+|---|---|---|
+| 設定頁 | API setup with Unified login | 含有 Instagram 登入的 API 設定 |
+| 商家資產管理組合 | 一定要連 | 不用 |
+| `API_MODE` | `unified` | 不填 |
+| 主機 | graph.facebook.com | graph.instagram.com |
+| 權杖 | 系統用戶權杖，期限看設定，程式不換 | IG 用戶權杖，程式每月換新 |
+
+舊 App 什麼都不用改，官方說繼續可用、沒有截止日。**新 App 這條路目前只照官方文件做完、selftest 通過，還沒有用真的 App 實測**（v0.5.0 先發布給讀者試），尤其是 Standard Access 能不能讀到一般讀者的留言；跑過之前要跟使用者講清楚。
+
 ## 不適用情境
 
 - 要替**別人的** IG 帳號架：那需要 Advanced Access（Meta 送審＋商家驗證），本 Skill 只走「服務自己帳號」的路。
@@ -54,7 +68,7 @@ last-updated: 2026-10-26
 ## 判斷與工作流程
 
 0. **走終端機版之前先跑 `node -v`**：沒有 Node.js（或低於 v18）就帶使用者到 nodejs.org 裝 LTS 版，或改走網頁版。新手電腦常常沒有，卡在「找不到指令」最浪費時間。
-1. **程式不要從頭寫**。複製 `scripts/worker/` 到使用者的專案資料夾，只填 wrangler.toml 的 `__…__`。範本已處理：留言通知即時回、每分鐘補掃 30 分鐘內漏掉的留言（不重查舊留言，省讀取額度）、紀錄寫 D1（每天 10 萬列；沒綁 D1 就退回 KV，約 330 位讀者／天）、多活動、追蹤門檻、公開回覆輪流三句、測試模式、每月換權杖、驗簽章。
+1. **程式不要從頭寫**。複製 `scripts/worker/` 到使用者的專案資料夾，只填 wrangler.toml 的 `__…__`。範本已處理：新舊 App 兩種模式（`API_MODE`）、留言通知即時回、每分鐘補掃 30 分鐘內漏掉的留言（不重查舊留言，省讀取額度）、紀錄寫 D1（每天 10 萬列；沒綁 D1 就退回 KV，約 330 位讀者／天）、多活動、追蹤門檻、公開回覆輪流三句、測試模式、每月換權杖、驗簽章。
 2. **改了 `src/index.js` 就先跑** `node scripts/selftest.mjs`（在本 Skill 資料夾），全部通過才 deploy。
 3. **使用者本人按、AI 不代按**：註冊帳號、輸入密碼、同意條款（建立 App、接受測試員邀請、Cloudflare 授權）、發佈 App、公開隱私權政策頁、打開總開關。到這些步驟就停下來，說清楚要按哪一顆、在哪個視窗。
 4. **機密不落地**：權杖、App 密鑰只存在 `~/.config/<worker 名稱>/`（chmod 600）和 Cloudflare secret；用剪貼簿＋管線搬，用完清空剪貼簿；不進 Git、不出現在對話。
@@ -81,13 +95,13 @@ last-updated: 2026-10-26
 
 ## 停止條件
 
-- 讀不到一般讀者的留言：先確認 App 已「發佈」（未發佈時回傳空陣列，不報錯）。
+- 讀不到一般讀者的留言：先確認 App 已「發佈」（未發佈時回傳空陣列，不報錯）。發佈了還讀不到、又是新 App：停下來回報，可能要 Advanced Access（送審＋商家驗證），不要自己繞過。
 - 使用者沒有測試小號：不上線，先請他準備。
 - 使用者想讓 AI 代按發佈、輸入密碼或同意條款：說明要本人按，然後等。
 
 ## 驗收標準
 
-- `node scripts/selftest.mjs` 全部通過（跑兩輪：只用 KV、KV＋D1，共 51 項）。
+- `node scripts/selftest.mjs` 全部通過（跑兩輪：只用 KV、KV＋D1，兩輪都含新舊 App）。
 - 小號實測：留言 → 幾秒內收到私訊與公開回覆；沒追蹤 → 按鈕 → 追蹤後拿到檔案。
 - `/run` 回 `no new comments`，`wrangler tail` 每分鐘有 `"* * * * *" … Ok`。
 - 權杖與密鑰沒有出現在 Git、對話或專案資料夾裡。

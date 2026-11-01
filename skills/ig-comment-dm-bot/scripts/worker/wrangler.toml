@@ -3,11 +3,12 @@ main = "src/index.js"
 compatibility_date = "2025-10-01"
 
 [triggers]
-# 每 1 分鐘補掃 30 分鐘內通知漏掉的留言（主力是留言通知，幾秒內處理）；每月 1 號台灣時間 11:00 換權杖
+# 每 1 分鐘補掃 30 分鐘內通知漏掉的留言（主力是留言通知，幾秒內處理）；每月 1 號台灣時間 11:00 清過期紀錄，舊 App 順便換權杖
 crons = ["* * * * *", "0 3 1 * *"]
 
 [vars]
-IG_USER_ID = "__IG_USER_ID__"        # GET /me?fields=user_id 拿到的 user_id
+API_MODE = "unified"                 # 新 App（設定頁是 Unified login）照填；舊 App（Instagram 登入）刪掉這行
+IG_USER_ID = "__IG_USER_ID__"        # 打開 /setup?key=RUN_KEY 會告訴你
 IG_USERNAME = "__IG_USERNAME__"      # 不含 @
 ENABLED = "false"                    # 測完、使用者點頭後才改 "true"
 TEST_USERS = "__TEST_IGSID__"        # 測試小號的 IGSID，總開關關著時只回它
@@ -21,10 +22,10 @@ CAMPAIGNS = '''[
   {"keyword": "__KEYWORD__", "name": "__FILE_NAME__", "file_url": "__FILE_URL__"}
 ]'''
 
-# 機密（不寫在這裡，用 npx wrangler secret put 設定）：IG_TOKEN、RUN_KEY、APP_SECRET、IG_APP_SECRET
+# 機密（不寫在這裡，用 npx wrangler secret put 設定）：IG_TOKEN、RUN_KEY、APP_SECRET（舊 App 另外要 IG_APP_SECRET）
 # 選配機密：ALERT_URL（出問題寄信用的 Google Apps Script 網址，見 references/alert-mailer.gs）
 
-# KV：放每月換新的權杖（一個月寫一次）
+# KV：舊 App 放每月換新的權杖（一個月寫一次）；新 App 不放權杖，但沒綁 D1 時會拿來記事
 [[kv_namespaces]]
 binding = "KV"
 id = "__KV_ID__"

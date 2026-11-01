@@ -3,6 +3,8 @@
 > 給用 ChatGPT、Gemini，或不想碰終端機的人。全程只用瀏覽器，費用 0 元（Meta 開發者、Cloudflare Workers 免費方案）。
 > 搭配檔案：`worker.js`（程式，整份複製貼上，不用改）。
 > 後台按鈕名稱可能會改，找不到時照意思找，不要卡在原字。
+> **最後實測：舊 App 流程 2026-10-26。新 App 流程（Unified Login）依 Meta 官方文件整理（2026-11-01），還沒有用真的 App 實測過。** 最不確定的是第 4 步：發佈後讀不讀得到一般讀者的留言、要不要商家驗證。卡住歡迎到 https://github.com/ChinYuanYang/ig-comment-dm-bot/issues 回報，貼畫面時先遮掉權杖和帳號。
+> 2026 年 10 月底起，Meta 新建的 App 只能走 Unified Login，下面的步驟就是這條路。你的 App 是更早建的，看最後面的「舊 App 怎麼辦」。
 
 ## 名詞小字典（先看這裡）
 
@@ -12,7 +14,8 @@
 | 權杖（Token） | 一把鑰匙，讓小幫手可以進你的 IG 做事。**只能放進 Cloudflare，不能給任何人** |
 | 密鑰（Secret） | 另一種鑰匙，用來確認敲門的真的是 Meta |
 | Cloudflare Worker | 一台免費、24 小時幫你值班的小電腦，程式放在這裡 |
-| KV | 小電腦裡的小抽屜，放那把每月換新的鑰匙 |
+| 商家資產管理組合（Business portfolio） | Meta 用來放你商業資產的資料夾。新 App 一定要連 |
+| KV | 小電腦裡的小抽屜，舊 App 拿來放每月換新的鑰匙 |
 | D1 | 小電腦裡的記事本，記住「傳過誰了」，一天可以寫 10 萬筆 |
 | Webhook | 門鈴。有人留言或私訊，Meta 就按門鈴叫小幫手 |
 | Cron（排程） | 鬧鐘。每分鐘響一次，小幫手就去看有沒有漏掉的留言 |
@@ -54,21 +57,25 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 1. https://developers.facebook.com/apps/ →「建立應用程式」。
 2. 名稱用英文，例如 `MyBrand Kit Bot`（不要含 Instagram、IG）。
 3. 使用案例：篩選「全部」→ 勾「**管理 Instagram 的訊息和內容**」。
-4. 商家：選「**我還不想連結商家資產管理組合**」（實測連結商家會建立失敗）。
+4. 商家：選擁有你 IG 帳號的**商家資產管理組合**（Business portfolio）。選錯會找不到 IG 帳號。
 5. 總覽頁最下面按「建立應用程式」。
+6. 如果建立時沒有選到，或頁面跳走、沒建成功：先選「我還不想連結」建好 App，再到 App 設定把它連到商家資產管理組合。**沒連的話，第 3 步的設定頁打不開。**
 
 ## 第 3 步：權限、測試人員、權杖
 
-1. 左側「使用案例」→「自訂」→「含有 Instagram 登入的 API 設定」。
-2. 第 1 步按「Add all required permissions」。
-3. 左側「應用程式角色」→「角色」→「新增用戶」→「Instagram 測試人員」→ 輸入**你自己的 IG 帳號** →「新增」。
-4. 到 IG 網頁 https://www.instagram.com/accounts/manage_access/ →「測試員邀請」→「接受」。
-5. 回 API 設定第 2 步「新增帳號」→ 會跳出 IG 授權**小視窗**（常躲在其他視窗後面）→ 登入、允許。
-6. 帳號那一列按「產生權杖」→ 勾「我瞭解」→「複製」。**權杖只貼到第 6 步的 Cloudflare，不要貼給任何人或 AI。**
+1. 左側「使用案例」→「管理 Instagram 的訊息和內容」→「自訂」→ **API setup with Unified login**。
+2. 第 1 步「Configure your app」→「Create new configuration」。
+3. 打開設定預覽 →「Edit permissions」：留下 `instagram_basic`、`instagram_manage_messages`、`instagram_manage_comments`，廣告相關的（`ads_`開頭）拿掉。
+4. 看權杖期限，有得選就選「**永不過期**」。按「Use this configuration」。
+5. 「Redirect URL」貼你的隱私權政策網址（要 https 開頭）→「Save」。小幫手不會用到它，但沒填存不了。
+6. 第 2 步「Generate access tokens」→「Add account」→ 輸入**你自己的 IG 帳號**，邀請成為 Instagram 測試人員。
+7. 到 IG 網頁 https://www.instagram.com/accounts/manage_access/ →「測試員邀請」→「接受」。
+8. 回到第 2 步，帳號那一列按「Generate token」→ 登入、選商家資產管理組合和 IG 帳號 → 複製權杖。**權杖只顯示一次，只貼到第 6 步的 Cloudflare，不要貼給任何人或 AI。**
+9. 打開 IG App →「設定」→「訊息和限時動態回覆」→ 確認「**允許存取訊息**」是開的，不然傳不出私訊。
 
 ## 第 4 步：隱私權政策＋發佈 App（最重要）
 
-**沒發佈前，App 只看得到你自己：讀者的留言、私訊全部讀不到，而且不會報錯。** 發佈不用商家驗證、不用送審。
+**沒發佈前，App 只看得到你自己：讀者的留言、私訊全部讀不到，而且不會報錯。** 只服務自己的帳號時，官方說 Standard Access 就夠，不用送審。（新 App 待實測）
 
 1. 把隱私權政策頁公開，複製網址。
 2. 左側「應用程式設定」→「基本資料」：「隱私政策網址」「資料刪除指示網址」都貼這個網址、「類別」選 Messenger Bots for Business →「Save Changes」。
@@ -95,7 +102,7 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 | `IG_TOKEN` | Secret | 第 3 步複製的權杖 |
 | `RUN_KEY` | Secret | 自己亂打一串 20 字以上的英數字（像密碼），等等開設定頁用 |
 | `APP_SECRET` | Secret | Meta「基本資料」頁的「應用程式密鑰」（按顯示，要輸入 FB 密碼） |
-| `IG_APP_SECRET` | Secret | API 設定頁的「Instagram 應用程式密鑰」 |
+| `API_MODE` | Text | `unified` |
 | `IG_USER_ID` | Text | 先填 `0`，第 7 步會告訴你正確值 |
 | `IG_USERNAME` | Text | 你的 IG 帳號，不含 @ |
 | `ENABLED` | Text | `false`（測完才改 `true`） |
@@ -115,10 +122,10 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 ]
 ```
 
-5. 「Settings」→「Triggers」→「Cron Triggers」新增兩個：`* * * * *`（每分鐘補掃）、`0 3 1 * *`（每月換權杖）。
+5. 「Settings」→「Triggers」→「Cron Triggers」新增兩個：`* * * * *`（每分鐘補掃）、`0 3 1 * *`（每月清過期紀錄）。
 6. 存檔或 Deploy，讓設定生效。
 
-> 為什麼要 KV 和 D1 兩個？KV 免費方案一天只能寫 1,000 次，大約只夠 330 位讀者；D1 一天可以寫 10 萬筆。記「傳過誰了」放 D1，KV 只放每月換一次的鑰匙。
+> 為什麼要 KV 和 D1 兩個？KV 免費方案一天只能寫 1,000 次，大約只夠 330 位讀者；D1 一天可以寫 10 萬筆。記「傳過誰了」放 D1。KV 是沒綁 D1 時的備用抽屜，舊 App 也用它放每月換一次的鑰匙。
 
 ## 第 7 步：一鍵設定頁
 
@@ -132,12 +139,13 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 
 ## 第 8 步：讓 Meta 把通知送到程式
 
-1. Meta 後台 API 設定第 3 步「設定 Webhooks」：
+1. Meta 後台「API setup with Unified login」第 3 步「Configure webhooks」：
    - 回呼網址：`https://my-kit-bot.<子網域>.workers.dev/webhook`
    - 驗證權杖：填 `HUB_VERIFY` 的值（瀏覽器常自動填進 Email，先刪掉）
    - 「驗證並儲存」
 2. 確認 `comments`、`messages`、`messaging_postbacks` 都是「已訂閱」。
 3. ⚠️ 一定要在這個後台頁面設；別的方式設定可能顯示成功但收不到通知。
+4. 再打開一次第 7 步的設定頁，確認「訂閱私訊通知：成功」。這一次會把留言通知一起訂閱好。
 
 ## 第 9 步：用小號測（總開關還關著，只會回小號）
 
@@ -186,13 +194,25 @@ https://transparency.meta.com/zh-tw/policies/community-standards/spam/
 - **傳訊息出現「這則訊息並未在允許的期間內傳送」**：讀者的回覆早於第 7 步的訂閱，請他再回一次就好。
 - **剛改了排程，留言沒被補到**：Cloudflare 改排程要幾分鐘才生效，用 `/run` 手動補跑。
 - **讀者沒收到**：私訊可能在「訊息請求」；回覆別人留言的第二層留言不會觸發；超過 7 天的留言官方不允許私訊。
-- **權杖過期**：程式每月 1 號自動換新（60 天有效）。如果 Worker 停了超過 60 天，要回第 3 步重新產生，再更新 `IG_TOKEN`。
+- **權杖過期**：新 App 的權杖期限看第 3 步的設定，選永不過期就不用換。如果收到通知信說權杖失效，回第 3 步重新產生，再更新 `IG_TOKEN`。把 IG 帳號搬到別的商家資產管理組合，或把 App 從組合移除，權杖也會失效。
+- **設定頁顯示「權杖有問題」**：先確認 `API_MODE` 填的是 `unified`，再確認權杖是第 3 步複製的那把。
+- **出現「(#200) The account owner has disabled access to Instagram Direct Messaging」**：第 3 步第 9 點的「允許存取訊息」沒開。
 - **小幫手停了一段時間，想補回漏掉的人**：打開 `https://…workers.dev/run?key=<RUN_KEY>&minutes=<往回看幾分鐘>&delay=6000&limit=8`，每次慢慢補 8 個人，回傳「no new comments」就補完了。留言後 7 天內都補得到。
 - **為什麼要慢慢補**：一口氣發太多私訊和留言回覆，可能被 Meta 當成異常活動，鎖住開發者帳號（實際發生過）。
 - **一天最多服務幾位讀者**：有綁 D1 的話，一天大約 1.6 萬位（D1 每天 10 萬列，每位讀者約用 6 列）。只綁 KV 的話，大約 330 位（關掉追蹤門檻約 500 位），超過的讀者會默默收不到。
 - **我之前架好時只有 KV，想加 D1**：照第 6 步的第 2、3 點建 D1、綁成 `DB`，再把最新版程式整份貼回去部署。以前的紀錄不用搬，程式在 D1 找不到時會回頭看 KV。
 - **暫停**：`ENABLED` 改 `false`。
 - **新增活動**：在 `CAMPAIGNS` 多加一組，存檔，用小號測新關鍵字。
+
+## 舊 App 怎麼辦
+
+如果你的 App 是更早建的，設定頁看得到「含有 Instagram 登入的 API 設定」，官方說可以繼續用，目前沒有截止日，**什麼都不用改**。升級新版程式時也不要加 `API_MODE`。
+
+舊 App 跟上面不一樣的地方：
+
+- 第 3 步走「含有 Instagram 登入的 API 設定」：按「Add all required permissions」→ 新增 Instagram 測試人員 → 第 2 步「新增帳號」→「產生權杖」。
+- 第 6 步不填 `API_MODE`，另外新增 Secret `IG_APP_SECRET`（API 設定頁的「Instagram 應用程式密鑰」）。
+- 權杖 60 天有效，程式每月 1 號自動換新。Worker 停超過 60 天才要重新產生。
 
 ## 隱私權政策範本（〈〉換成你的資料）
 

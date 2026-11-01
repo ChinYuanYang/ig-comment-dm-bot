@@ -2,8 +2,21 @@
 // 流程：讀者留言含關鍵字 → 私訊＋留言底下公開回覆 → （追蹤門檻打開時）讀者回覆或按「我追蹤好了」→ 查追蹤 → 傳檔案或傳按鈕
 // 設定都在 wrangler.toml 的 [vars]，活動清單在 CAMPAIGNS；程式本身換活動不用改。
 
-const API = "https://graph.instagram.com/v24.0";
+// 兩種 Meta App 走不同的路（API_MODE 決定）：
+// 沒填：舊 App（Instagram 登入）→ graph.instagram.com，/me 就是 IG 帳號，權杖每月換新
+// "unified"：2026 年 10 月底起新建的 App（Unified Login）→ graph.facebook.com，/me 不是 IG 帳號，要用帳號編號
+let API = "https://graph.instagram.com/v24.0";
+let ME = "me";
 const DAY = 86400;
+
+function isUnified(env) {
+  return env.API_MODE === "unified";
+}
+
+function useMode(env) {
+  API = isUnified(env) ? "https://graph.facebook.com/v26.0" : "https://graph.instagram.com/v24.0";
+  ME = isUnified(env) ? env.IG_USER_ID : "me";
+}
 
 // ── 記事本：誰拿過檔案、哪則留言回過了 ─────────────────────────
 // 有綁 D1（env.DB）就寫 D1：免費方案每天 10 萬列，KV 只有 1,000 次。沒綁就照舊用 KV。
@@ -31,11 +44,11 @@ async function memCleanup(env) {
   if (env.DB) await env.DB.prepare("DELETE FROM kv WHERE exp < ?").bind(Date.now()).run();
 }
 
-// ── 訊息文案（活動可以在 CAMPAIGNS 裡用 ask_text／file_text 覆寫）──────────
+// ── 訊息文案（活動可以在 CAMPAIGNS 裡用 ask_text／file_text／follow_text 覆寫）──────────
 const TEXT = {
   ask: (c) => c.ask_text || `謝謝你想要${c.name} 🌻\n回我一句「${c.keyword}」，我就把檔案傳給你`,
   file: (c) => c.file_text || `給你！${c.name} 👇\n\n${c.file_url}`,
-  follow: (env) => `檔案準備好了！\n追蹤 @${env.IG_USERNAME} 之後按「我追蹤好了」，我馬上傳給你 🌻`,
+  follow: (env, c) => c?.follow_text || `檔案準備好了！\n追蹤 @${env.IG_USERNAME} 之後按「我追蹤好了」，我馬上傳給你 🌻`,
   notYet: "我這邊還沒看到你的追蹤耶，IG 有時候會慢幾秒。\n追蹤之後再按一次「我追蹤好了」🙏",
   // 留言底下的公開回覆，輪流用，避免每句都一樣
   publicReplies: [
@@ -47,6 +60,7 @@ const TEXT = {
 
 export default {
   async fetch(req, env, ctx) {
+    useMode(env);
     const url = new URL(req.url);
 
     // 手動立刻掃一次留言（測試或補跑用，要帶 RUN_KEY）
@@ -91,6 +105,7 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    useMode(env);
     if (event.cron === env.REFRESH_CRON) ctx.waitUntil(refreshToken(env).then(() => memCleanup(env)));
     else ctx.waitUntil(guard(env, "poll", () => pollComments(env)));
   },
@@ -100,7 +115,7 @@ export default {
 // 主力是留言通知（webhook），幾秒內就處理；這裡只補 90 秒前、通知可能漏掉的留言，避免兩邊同時回。
 async function pollComments(env, log = [], opts = {}) {
   const token = await getToken(env);
-  const media = await ig(`/me/media?fields=id&limit=${env.WATCH_POSTS}`, token);
+  const media = await ig(`/${ME}/media?fields=id&limit=${env.WATCH_POSTS}`, token);
   // 只回頭看 30 分鐘：通知漏掉的留言這段時間內就補到；看 7 天的話，處理過的舊留言每分鐘都要再查一次 KV，
   // 關鍵字留言累積約 70 則就會用完免費方案每天 10 萬次讀取。IG 回傳的留言新的在前，看到更舊的就停。
   const since = Date.now() - (opts.minutes || 30) * 60 * 1000;
@@ -120,7 +135,7 @@ async function pollComments(env, log = [], opts = {}) {
           if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
         }
       }
-      next = !reachedOld && res.paging?.next ? res.paging.next.replace(API, "") : null;
+      next = !reachedOld && res.paging?.next ? res.paging.next.replace(/^https:\/\/graph\.[a-z]+\.com\/v[\d.]+/, "") : null;
     }
   }
 }
@@ -156,7 +171,9 @@ async function handleComment(c, token, env, log = [], opts = {}) {
 async function handleWebhook(body, env) {
   for (const entry of body.entry || []) {
     for (const ch of entry.changes || []) {
-      if (ch.field === "comments" && ch.value?.id) await handleComment(ch.value, await getToken(env), env);
+      // 留言編號：舊 App 實測在 id；官方 Unified Login 範例寫 comment_id，兩個都認
+      const id = ch.value?.id || ch.value?.comment_id;
+      if (ch.field === "comments" && id) await handleComment({ ...ch.value, id }, await getToken(env), env);
     }
     for (const ev of entry.messaging || []) {
       const uid = ev.sender?.id;
@@ -191,7 +208,7 @@ async function checkAndDeliver(uid, camp, fromButton, env) {
     await memPut(env, `s:${uid}:${camp.keyword}`, "sent", 90 * DAY);
     console.log("file sent", uid, camp.keyword);
   } else {
-    await send({ recipient: { id: uid }, message: buttons(fromButton ? TEXT.notYet : TEXT.follow(env), camp, env) }, token);
+    await send({ recipient: { id: uid }, message: buttons(fromButton ? TEXT.notYet : TEXT.follow(env, camp), camp, env) }, token);
     console.log("ask follow", uid, camp.keyword, fromButton);
   }
 }
@@ -214,27 +231,42 @@ function buttons(text, camp, env) {
 
 async function setup(env) {
   const token = await getToken(env);
-  const me = await ig("/me?fields=user_id,username,account_type", token);
-  if (me.error) return `權杖有問題：${me.error.message}`;
-  const sub = await igPost("/me/subscribed_apps", { subscribed_fields: "messages,messaging_postbacks" }, token);
-  const conv = await ig("/me/conversations?platform=instagram&fields=participants&limit=10", token);
+  const me = isUnified(env) ? await unifiedAccount(env, token) : await ig("/me?fields=user_id,username,account_type", token);
+  if (me.error) return `權杖有問題：${me.error.message}\n（設定頁顯示「Unified login」的新 App，要把 API_MODE 設成 unified；舊 App 不用設）`;
+  const id = isUnified(env) ? me.user_id : "me";
+  const fields = isUnified(env) ? "messages,messaging_postbacks,comments" : "messages,messaging_postbacks";
+  const sub = await igPost(`/${id}/subscribed_apps`, { subscribed_fields: fields }, token);
+  const conv = await ig(`/${id}/conversations?platform=instagram&fields=participants&limit=10`, token);
   const people = (conv.data || []).flatMap((c) => c.participants?.data || [])
     .filter((p) => p.username !== me.username).map((p) => `  ${p.username}：${p.id}`);
   return [
     `IG_USER_ID 請填：${me.user_id}`,
-    `IG_USERNAME 請填：${me.username}（帳號類型 ${me.account_type}）`,
+    `IG_USERNAME 請填：${me.username}${me.account_type ? `（帳號類型 ${me.account_type}）` : ""}`,
     `訂閱私訊通知：${sub.success ? "成功" : JSON.stringify(sub)}`,
     "最近私訊過的人（測試小號的編號填進 TEST_USERS）：",
     ...(people.length ? [...new Set(people)] : ["  （沒有，請先用小號私訊你的帳號一句話再重整這頁）"]),
   ].join("\n");
 }
 
-// ── 權杖：存在 KV，每月換新（官方：至少 24 小時、未過期才能換，換完再撐 60 天）──
+// Unified Login 的權杖可能分享了好幾個 IG 帳號：有填 IG_USERNAME 就挑那個，否則用第一個
+async function unifiedAccount(env, token) {
+  const r = await ig("/me/assigned_instagram_accounts?fields=id,username", token);
+  if (r.error) return r;
+  const list = r.data || [];
+  const a = list.find((x) => x.username === env.IG_USERNAME) || list[0];
+  if (!a) return { error: { message: "這把權杖沒有分享任何 IG 帳號，請重新產生權杖並選取帳號" } };
+  return { user_id: a.id, username: a.username };
+}
+
+// ── 權杖：舊 App 存在 KV，每月換新（官方：至少 24 小時、未過期才能換，換完再撐 60 天）──
+// Unified Login 的權杖不走這套，只用 IG_TOKEN，也不會讀到舊 App 留在 KV 的權杖
 async function getToken(env) {
+  if (isUnified(env)) return env.IG_TOKEN;
   return (await env.KV.get("token")) || env.IG_TOKEN;
 }
 
 async function refreshToken(env) {
+  if (isUnified(env)) return;
   const t = await getToken(env);
   const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${t}`).then((x) => x.json());
   if (r.access_token) {
@@ -349,7 +381,7 @@ async function igPost(path, params, token) {
 }
 
 async function send(payload, token) {
-  return fetch(`${API}/me/messages`, {
+  return fetch(`${API}/${ME}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),

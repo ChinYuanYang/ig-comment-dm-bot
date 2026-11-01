@@ -17,13 +17,14 @@
 > 全程用 Meta 官方 API 和 Cloudflare 免費方案，只能用在**你自己的** IG 帳號。
 
 > [!WARNING]
-> **2026-11-01 更新：Meta 新建的 App 暫時無法照目前的指南架設。**
-> Meta 現在要求新 App 改走 Unified Login，現有程式還不相容，新版正在實測，好了會發布在 Releases。
+> **2026-11-01 更新：Meta 新建的 App 改走 Unified Login，指南和程式已經跟著改，但新流程還沒有用真的 App 實測過。**
+> 這版照 Meta 官方文件寫好、假資料測試通過。最不確定的是發佈後讀不讀得到一般讀者的留言、要不要商家驗證，如果 Meta 不放行，可能會做到一半卡住。
+> 想試的話歡迎，卡住請到 [Issues](https://github.com/ChinYuanYang/ig-comment-dm-bot/issues) 回報，貼畫面前先遮掉權杖和帳號。
 > 已經架好的舊 App 不受影響，不用做任何事。
 
 > [!TIP]
-> **最近更新：v0.4.1｜2026-10-27**
-> 新增「上線之後：想改東西怎麼辦」；AI 開場先問你是從頭架，還是已經架好、想改設定。
+> **最近更新：v0.5.0｜2026-11-01**
+> 支援 Meta 新建的 App（Unified Login，未實測）；舊 App 不用改。
 >
 > 已經架好的人怎麼更新、每一版改了什麼 👉 [CHANGELOG.md](./CHANGELOG.md)
 > 想在出新版時收到通知：
